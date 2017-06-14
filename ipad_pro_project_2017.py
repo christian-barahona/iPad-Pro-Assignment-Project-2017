@@ -14,7 +14,7 @@ import credentials
 sheet_selection = input("Select sheet to work from: ")
 
 # Lists that hold asset data from Excel sheet
-name = []
+full_name = []
 corporate_id = []
 asset = []
 phone_number = []
@@ -27,39 +27,54 @@ work_book = load_workbook('spreadsheets/iPad_Pro.xlsx')
 work_book.get_sheet_names()
 sheet = work_book.get_sheet_by_name(sheet_selection)
 
-# Puts name, corporate id, asset, and phone number from predefined columns within Excel sheet
-get_name = sheet['A']
-for x in range(len(get_name)):
-    name.append(str(get_name[x].value))
+""" The following four functions validate Excel input by adding values from cells 
+into their respective lists then checks for proper formatting """
 
-get_corporate_id = sheet['B']
-for x in range(len(get_corporate_id)):
-    corporate_id.append(str(get_corporate_id[x].value))
 
-get_asset = sheet['C']
-for x in range(len(get_asset)):
-    asset.append(str(get_asset[x].value))
+def check_phone_number():
+    get_phone_number = sheet['D']
+    for x in range(len(get_phone_number)):
+        stripped_number = str(get_phone_number[x].value).replace(' ', '').replace('-', '')
+        if len(stripped_number) == 10 and str.isdigit(stripped_number):
+            phone_number.append(stripped_number[:3] + "-" + stripped_number[3:6] + "-" + stripped_number[6:])
+        else:
+            phone_number.append("#INVALID_ENTRY")
 
-get_phone_number = sheet['D']
-for x in range(len(get_phone_number)):
-    number = str(get_phone_number[x].value)
-    # Check for and corrects proper telephone number formatting
-    if '-' not in number:
-        number = number[:3] + "-" + number[3:6] + "-" + number[6:]
-        phone_number.append(number)
-    else:
-        phone_number.append(number)
 
-# Gets total number of entries made into the asset list
-entry_count = len(get_asset)
+def check_asset():
+    get_asset = sheet['C']
+    for x in range(len(get_asset)):
+        stripped_number = str(get_asset[x].value).replace(' ', '')
+        if 13 < len(stripped_number) < 18 and str.isdigit(stripped_number):
+            asset.append(stripped_number)
+        elif stripped_number[:3] == "ATL" or stripped_number[:3] == "CPK" and len(stripped_number) == 9:
+            asset.append(stripped_number)
+        else:
+            asset.append("#INVALID_ENTRY")
 
-# Sets up ChromeDriver and options
-chrome_options = Options()
-chrome_options.add_argument("--incognito")
-chrome_options.add_argument("--disable-infobars")
-chrome_options.add_argument("--start-maximized")
-driver = webdriver.Chrome(chrome_options=chrome_options)
-driver.get("https://myit.ucb.com/ux/smart-it/#/")
+
+def check_name():
+    get_name = sheet['A']
+    for x in range(len(get_name)):
+        stripped_name = str(get_name[x].value).replace(' ', '').replace('-', '').replace('\'', '')
+        if str.isalpha(stripped_name):
+            full_name.append(str.strip(' '.join(str(get_name[x].value).split())))
+        else:
+            full_name.append("#INVALID_ENTRY")
+
+
+def check_corporate_id():
+    get_corporate_id = sheet['B']
+    for x in range(len(get_corporate_id)):
+        stripped_id = str(get_corporate_id[x].value).replace(' ', '')
+        if str.isdigit(stripped_id[1:]) \
+                and len(stripped_id) == 7 \
+                and stripped_id[:1] == "U" \
+                or stripped_id[:1] == "E" \
+                or stripped_id[:1] == "T":
+            corporate_id.append(stripped_id)
+        else:
+            corporate_id.append("#INVALID_ENTRY")
 
 
 # Performs the login into Smart IT
@@ -99,6 +114,22 @@ def by_xpath(step, count):
     else:
         execute_step(step, count)
 
+# Loads data from Excel sheet and validates it
+check_phone_number()
+check_asset()
+check_name()
+check_corporate_id()
+
+# Gets total number of entries made into the asset list for log count
+entry_count = len(asset)
+
+# Sets up ChromeDriver and options
+chrome_options = Options()
+chrome_options.add_argument("--incognito")
+chrome_options.add_argument("--disable-infobars")
+chrome_options.add_argument("--start-maximized")
+driver = webdriver.Chrome(chrome_options=chrome_options)
+driver.get("https://myit.ucb.com/ux/smart-it/#/")
 smart_it_login(username, password)
 
 # Counts iterations when used with ChromeDriver to close out browser window due to high memory usage buildup
