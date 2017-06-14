@@ -22,6 +22,9 @@ phone_number = []
 username = credentials.login['username']
 password = credentials.login['password']
 
+# Initializes failed step execution variable
+failed = False
+
 # Points to Excel sheet which contains asset details based on user's previous selection
 work_book = load_workbook('spreadsheets/iPad_Pro.xlsx')
 work_book.get_sheet_names()
@@ -87,32 +90,81 @@ def smart_it_login(usn, pwd):
     l.click()
 
 
-# Performs click action on specified html tags and re-attempts on fail
-def execute_step(stp, cnt):
+# Completion check for specified workflow
+def check_completion(fail_count):
+    global failed
     try:
-        stp = stp[1:]
-        wait = WebDriverWait(driver, 60)
-        element = wait.until(Ec.presence_of_element_located((By.XPATH, '%s' % stp)))
+        driver.find_elements_by_xpath('//div[contains(@aria-label, "Deployed")]')
+        print("Process completed!")
+    except WebDriverException:
+        fail_count += 1
+        if fail_count == 4:
+            failed = True
+            return
+        print("Checking completion")
+        time.sleep(3)
+        check_completion(fail_count)
+
+
+# Prints out failed item details (later to be made into an actual log file)
+def failed_log(item):
+    print("FAILED ASSET: %s" % item)
+
+
+# Attempts to close any overlay elements present on page that may be affecting next step
+def failed_row(step, fail_count):
+    try:
+        wait = WebDriverWait(driver, 2)
+        element = wait.until(Ec.presence_of_element_located((By.XPATH, '%s' % step)))
         element.click()
     except WebDriverException:
-        print("Step %s has failed. 2 second delay set. Trying once more." % cnt)
+        fail_count += 1
+        print("Attempt %s to close possible overlay." % fail_count)
+        if fail_count == 3:
+            driver.get("https://myit.ucb.com/ux/smart-it/#/")
+            return
+        print("Attempting to close possible overlay again.")
         time.sleep(2)
-        stp = "$" + stp
-        execute_step(stp, cnt)
+        failed_row(step, fail_count)
 
 
-# Determines if step is an input action or click action
+# Performs click action on specified html tags and re-attempts on fail
+def execute_step(step, count, fail_count):
+    steps_counter = count + 1
+    global failed
+    try:
+        step = step[1:]
+        wait = WebDriverWait(driver, 3)
+        element = wait.until(Ec.presence_of_element_located((By.XPATH, '%s' % step)))
+        element.click()
+
+    except WebDriverException:
+        fail_count += 1
+        print("Fail count: %s" % fail_count)
+        if fail_count == 4:
+            failed = True
+            step = '//button[contains(text(), "Cancel")]'
+            failed_row(step, 0)
+            return
+        print("Step %s has failed. 2 second delay set. Trying once more." % steps_counter)
+        time.sleep(2)
+        step = "$" + step
+        execute_step(step, count, fail_count)
+
+
+# Determines if step is an input, click, or check action
 def by_xpath(step, count):
     steps_counter = count + 1
     print("%s | Step #%s" % (step, steps_counter))
-    if step[:1] != "$":
+    if step == "check":
+        check_completion(0)
+    elif step[:1] != "$":
         actions = ActionChains(driver)
         actions.send_keys(step)
         actions.send_keys(Keys.RETURN)
         actions.perform()
-
     else:
-        execute_step(step, count)
+        execute_step(step, count, 0)
 
 # Loads data from Excel sheet and validates it
 check_phone_number()
@@ -199,4 +251,11 @@ for loop_count, a in enumerate(asset):
 
     for step_counter, s in enumerate(steps):
         by_xpath(s, step_counter)
+
+        # Checks if step has failed and routes it for logging if true
+        if failed:
+            failed_asset = asset[loop_count]
+            failed_log(failed_asset)
+            failed = False
+            break
     mem_leak_counter += 1
